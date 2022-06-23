@@ -1,22 +1,14 @@
 // swift-tools-version:5.5
 import PackageDescription
 
-#if os(macOS)
-private let addCryptoSwift = false
-private let staticSwiftSyntax = true
-#else
-private let addCryptoSwift = true
-private let staticSwiftSyntax = false
-#endif
-
 let frameworkDependencies: [Target.Dependency] = [
     .product(name: "SourceKittenFramework", package: "SourceKitten"),
     .product(name: "SwiftSyntax", package: "SwiftSyntax"),
     .product(name: "SwiftSyntaxParser", package: "SwiftSyntax"),
     "Yams",
+    .product(name: "CryptoSwift", package: "CryptoSwift", condition: .when(platforms: [.linux])),
+    .target(name: "SyntaxParserBinaryWrapper", condition: .when(platforms: [.macOS])),
 ]
-+ (addCryptoSwift ? ["CryptoSwift"] : [])
-+ (staticSwiftSyntax ? ["lib_InternalSwiftSyntaxParser"] : [])
 
 let package = Package(
     name: "SwiftLint",
@@ -31,8 +23,9 @@ let package = Package(
         .package(url: "https://github.com/jpsim/SourceKitten.git", from: "0.33.0"),
         .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.1"),
         .package(url: "https://github.com/scottrhoyt/SwiftyTextTable.git", from: "0.9.0"),
-        .package(url: "https://github.com/JohnSundell/CollectionConcurrencyKit.git", from: "0.2.0")
-    ] + (addCryptoSwift ? [.package(url: "https://github.com/krzyzanowskim/CryptoSwift.git", .upToNextMinor(from: "1.5.1"))] : []),
+        .package(url: "https://github.com/JohnSundell/CollectionConcurrencyKit.git", from: "0.2.0"),
+        .package(url: "https://github.com/krzyzanowskim/CryptoSwift.git", .upToNextMinor(from: "1.5.1")),
+    ],
     targets: [
         .executableTarget(
             name: "swiftlint",
@@ -45,11 +38,7 @@ let package = Package(
         ),
         .target(
             name: "SwiftLintFramework",
-            dependencies: frameworkDependencies,
-            // Pass `-dead_strip_dylibs` to ignore the dynamic version of `lib_InternalSwiftSyntaxParser`
-            // that ships with SwiftSyntax because we want the static version from
-            // `StaticInternalSwiftSyntaxParser`.
-            linkerSettings: staticSwiftSyntax ? [.unsafeFlags(["-Xlinker", "-dead_strip_dylibs"])] : []
+            dependencies: frameworkDependencies
         ),
         .testTarget(
             name: "SwiftLintFrameworkTests",
@@ -60,9 +49,18 @@ let package = Package(
                 "Resources",
             ]
         ),
-    ] + (staticSwiftSyntax ? [.binaryTarget(
+        .target(
+            name: "SyntaxParserBinaryWrapper",
+            dependencies: [.target(name: "lib_InternalSwiftSyntaxParser")],
+            // Pass `-dead_strip_dylibs` to ignore the dynamic version of `lib_InternalSwiftSyntaxParser`
+            // that ships with SwiftSyntax because we want the static version from
+            // `StaticInternalSwiftSyntaxParser`.
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-dead_strip_dylibs"])]
+        ),
+        .binaryTarget(
             name: "lib_InternalSwiftSyntaxParser",
             url: "https://github.com/keith/StaticInternalSwiftSyntaxParser/releases/download/5.6/lib_InternalSwiftSyntaxParser.xcframework.zip",
             checksum: "88d748f76ec45880a8250438bd68e5d6ba716c8042f520998a438db87083ae9d"
-        )] : [])
+        )
+    ]
 )
